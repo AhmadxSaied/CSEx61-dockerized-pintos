@@ -90,7 +90,8 @@ void
 thread_init (void) 
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  load_avg = 0;
+  load_avg = convert_fixed_point(0);
+  printf("%d\n",load_avg);
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
@@ -108,7 +109,6 @@ void
 thread_start (void) 
 {
   /* Create the idle thread. */
-  load_avg = 0;
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
@@ -153,7 +153,8 @@ void thread_update_priority_all(){
   struct thread* t = list_entry(iter,struct thread,allelem);
 
   t->priority = PRI_MAX - convert_round_zero(divide_by_int(t -> recent_cpu,4)) - ((t->nice *2));
-
+  if(t->priority > PRI_MAX) t->priority = PRI_MAX;
+  if(t->priority < PRI_MIN) t->priority = PRI_MIN;
 }
 }
 
@@ -174,6 +175,9 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+if(t != idle_thread){
+      t->recent_cpu = add_to_int(t->recent_cpu,1);
+}
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -400,15 +404,18 @@ thread_set_nice (int nice UNUSED)
     curr-> nice= nice;
   }
   // calculate priority and check if not the max yield
-  thread_set_priority(PRI_MAX - convert_round_zero(divide_by_int(curr -> recent_cpu,4)) - (curr->nice *2));
+  curr->priority = (PRI_MAX - convert_round_zero(divide_by_int(curr -> recent_cpu,4)) - (curr->nice *2));
+  if(curr->priority > PRI_MAX) curr->priority= PRI_MAX;
+  if(curr->priority < PRI_MIN) curr->priority= PRI_MIN;
 
-
+  if(!list_empty(&ready_list)){
   int max_priority= list_entry(list_max(&ready_list,&list_less_comp,NULL),
 struct thread,elem)->priority;
 
-if(!list_empty(&ready_list) && curr->priority < max_priority){
+if(curr->priority < max_priority){
   thread_yield();
 }
+  }
 }
 
 bool list_less_comp(const struct list_elem * a,const struct list_elem* b, void* aux UNUSED){
@@ -429,38 +436,34 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-
-  int number_of_ready_threads = list_size(&ready_list);
-  
-  if(thread_current()!=idle_thread){
-    number_of_ready_threads++;
-  }
-
-  real cascade_value = mult_by_int(load_avg,59);
-  cascade_value = divide_by_int(cascade_value , 60);
-
-  real cascade_value_2 = convert_fixed_point(number_of_ready_threads);
-  cascade_value_2 = divide_by_int(cascade_value_2, 60);
-
-  int final = convert_round_nearest(mult_by_int(add(cascade_value,cascade_value_2),100));
-  return final;
+  // printf("Load: %d\n", load_avg);
+  int32_t val = convert_round_nearest(load_avg)*100 ;
+  // printf("Load: %d\n", val);
+  // printf("%s\n",thread_name());
+  return val;
 }
 void update_load_avg(){
   int number_of_ready_threads = list_size(&ready_list);
-  
-  if(thread_current()!=idle_thread){
+  printf("threads %d\n",number_of_ready_threads);
+  if(thread_current()!= idle_thread){
     number_of_ready_threads++;
   }
-
+  printf("status %d\n",(THREAD_RUNNING == thread_current()->status));
+  printf("threads %d\n",number_of_ready_threads);
+  printf("load_avg %d\n",load_avg);
   real cascade_value = mult_by_int(load_avg,59);
+  printf("cas1: %d of 59/60\n",cascade_value);
+  printf("cas1: %d of 59/60 * load_avg \n",cascade_value);
 
-  cascade_value = divide_by_int(cascade_value , 60);
 
   real cascade_value_2 = convert_fixed_point(number_of_ready_threads);
-  cascade_value_2 = divide_by_int(cascade_value_2, 60);
+  printf("cas2: %d of  1/60\n",cascade_value_2);
+  printf("cas2: %d of 1 /60  of ready\n",cascade_value_2);
 
-  load_avg = (add(cascade_value,cascade_value_2));
 
+  printf("cas1 : %d \ncas2: %d\n",cascade_value,cascade_value_2);
+  load_avg = (divide_by_int(add(cascade_value,cascade_value_2),60));
+  
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -559,7 +562,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  if(strcmp(name,"idle")==0){
+  if(t == initial_thread || strcmp(name,"idle")==0){
     t->nice = 0;
     t->recent_cpu = 0;
   }

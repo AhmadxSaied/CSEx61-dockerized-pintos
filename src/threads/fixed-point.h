@@ -48,62 +48,59 @@ this is all we need to know
 typedef int32_t real;
 
 
-static inline real convert_fixed_point(int n){
-
-    
-    real real_num = (n *shifter);
+static inline real convert_fixed_point(int32_t n){
+    real real_num = (real)(n *(shifter));
     return real_num;
 }
-static inline int convert_round_zero(int x){
+static inline int32_t convert_round_zero(real x){
     // we shift back the value to normall
     return (x / (shifter));
 }
-static inline int convert_round_nearest(int x){
+static inline int32_t convert_round_nearest(real x){
     if(x >= 0){
         // adding a value to make a bias for rounding to the nearest
         return ((x + (shifter/2)) / (shifter));
     } 
-    
     return ((x - (shifter/2)) / (shifter));
 }
 
-static inline real add(int  x, int y){
+static inline real add(real  x, real y){
 
     real real_num = (x + y);
     return real_num;
 }
-static inline real  sub(int  x,int y){
+static inline real  sub(real  x,real y){
 
     real real_num = x - y;
     return real_num;
 }
-static inline real  add_to_int(int x,int n){
-    real real_num = (x + (n * shifter));
+static inline real  add_to_int(real x,int32_t n){
+    real real_num = (x + (real)(n * (shifter)));
     return real_num;
 }
-static inline   real sub_to_int(int  x,int n){
-    real real_num = (x - (n * shifter));
+static inline   real sub_to_int(real  x,int32_t n){
+    real real_num = (x - (real)(n * (shifter)));
     return real_num;
 }
-static inline real mult_by_fixed(int  x, int y){
+static inline real mult_by_fixed(real  x, real y){
 
     real real_num = 
-        (int32_t)((int64_t)(x) * (int64_t)(y) / (shifter));
-    
+        (real)((int64_t)(x) * (int64_t)(y) / (shifter));
     return real_num;
 }
-static inline real mult_by_int(int  x, int n){
+static inline real mult_by_int(real  x, int32_t n){
     real real_num = x * n;
     return real_num;
 }
  
-static inline real divide_by_fixed(int  x,int y){
+static inline real divide_by_fixed(real  x,real y){
     ASSERT( y != 0);
-    real real_num = (int32_t)(((int64_t)(x) * (shifter)) / (int64_t)(y));
+    real real_num = (real)(((int64_t)(x) * (shifter)) / (int64_t)(y));
 
     return real_num;
 }
-static inline real divide_by_int(int  x,int n){
+static inline real divide_by_int(real  x,int32_t n){
+    ASSERT(n != 0);
     real real_num = (x / n);
     return real_num;
 }
