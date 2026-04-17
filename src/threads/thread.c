@@ -336,6 +336,11 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  if(list_empty(&ready_list)) return;
+  struct thread *max_thread = list_entry(list_max(&ready_list, priority_less, NULL), struct thread, elem);
+  if(max_thread->priority > thread_current ()->priority) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -487,26 +492,22 @@ alloc_frame (struct thread *t, size_t size)
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
+
+bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  const int a_priority = (list_entry(a, struct thread, elem)->priority);
+  const int b_priority = (list_entry(b, struct thread, elem)->priority);
+  return a_priority < b_priority;
+}
+
 static struct thread *
 next_thread_to_run (void) 
 {
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    struct list_elem *e;
-    int max_priority = -1;
-    struct thread *max_thread = list_entry(list_begin (&ready_list), struct thread, elem);
-    for (e = list_begin (&ready_list); e != list_end (&ready_list);
-          e = list_next (e)) {
-        struct thread *t = list_entry (e, struct thread, elem);
-        if (t->priority > max_priority) {
-          max_priority = t->priority;
-          max_thread = t;
-        }
-    }
+    struct thread *max_thread = list_entry(list_max(&ready_list, priority_less, NULL), struct thread, elem);
     list_remove(&max_thread->elem);
     return max_thread;
-    
   }
     //return list_entry (list_pop_front (&ready_list), struct thread, elem);
     // loop over ready_list, find the one with the highest thread->priority
