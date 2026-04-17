@@ -3,10 +3,12 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
+#include <string.h>
 #include "devices/pit.h"
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/fixed-point.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -29,6 +31,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+// here i will make a list which has the thread and the time when it should be unblocked
+static struct list sleeping_threads_list;
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -37,6 +41,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleeping_threads_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,11 +94,18 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  if (ticks <= 0) return;
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  enum intr_level old_level = intr_disable ();  // disable interrupts
+  // i disabled the interrupts here do ensure the atomicity of the operations that will follow, and to ensure that the thread will not be scheduled before it is blocked.
+  
+  struct thread *cur = thread_current ();
+  cur->wake_up_time = timer_ticks () + ticks;
+  
+  list_push_back (&sleeping_threads_list, &cur->elem);
+  thread_block ();
+  
+  intr_set_level (old_level); // enable interrupts after blocking the thread
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -169,9 +181,35 @@ timer_print_stats (void)
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
-{
+{  
   ticks++;
+  // here i will loop on the sleeping threads list and check if there is any thread that should be unblocked, if there is i will unblock it and remove it from the list.
+  struct list_elem *e = list_begin(&sleeping_threads_list);
+  while (e != list_end (&sleeping_threads_list))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      
+      if (ticks >= t->wake_up_time) 
+      {
+        e = list_remove (e); 
+        thread_unblock (t);
+      }
+      else 
+      {
+        e = list_next (e);
+      }
+    }
   thread_tick ();
+  if(thread_mlfqs){
+  if(timer_ticks() % 4 ==0){
+    thread_update_priority_all();
+  }
+
+  if(ticks % TIMER_FREQ == 0){
+    update_load_avg();
+    thread_update_recent_cpu_all();
+  }
+}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
