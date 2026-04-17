@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "malloc.h"
 #define dp 14
 #define shifter (1 << dp)
 /*
@@ -46,7 +45,7 @@ this is all we need to know
 
 
 
-typedef int real;
+typedef int32_t real;
 
 
 static inline real convert_fixed_point(int n){
