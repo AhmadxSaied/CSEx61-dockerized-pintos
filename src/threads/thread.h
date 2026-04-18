@@ -92,6 +92,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t wake_up_time; // the time when the thread should be unblocked, used for sleeping threads list.
 
+    struct list held_locks ;  // current locks held by the thread itself , to tracke the locks acquired by the current thread 
+    int stored ;  // storing the original priority 
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     int nice;                           /* Thread nice value */

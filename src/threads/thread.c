@@ -566,7 +566,9 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->stored = priority ;  // the original one 
   t->magic = THREAD_MAGIC;
+  list_init(&t->held_locks) ; // initialize for held_locks 
   if(t == initial_thread || strcmp(name,"idle")==0){
     t->nice = 0;
     t->recent_cpu = 0;
