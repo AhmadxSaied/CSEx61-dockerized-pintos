@@ -200,8 +200,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
       }
     }
   thread_tick ();
+  // if we are in advanced scheduler mode we do the advanved scheduler operations
   if(thread_mlfqs){
-  if(timer_ticks() % 4 ==0){
+    
+  if(ticks % 4 ==0){
+
     thread_update_priority_all();
   }
 

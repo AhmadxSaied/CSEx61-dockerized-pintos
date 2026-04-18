@@ -85,7 +85,7 @@ static inline   real sub_to_int(real  x,int32_t n){
 static inline real mult_by_fixed(real  x, real y){
 
     real real_num = 
-        (real)((int64_t)(x) * (int64_t)(y) / (shifter));
+        (real)(((int64_t)x) * y / (shifter));
     return real_num;
 }
 static inline real mult_by_int(real  x, int32_t n){
@@ -95,7 +95,7 @@ static inline real mult_by_int(real  x, int32_t n){
  
 static inline real divide_by_fixed(real  x,real y){
     ASSERT( y != 0);
-    real real_num = (real)(((int64_t)(x) * (shifter)) / (int64_t)(y));
+    real real_num = (real)((((int64_t)x) * (shifter)) / (int64_t)(y));
 
     return real_num;
 }

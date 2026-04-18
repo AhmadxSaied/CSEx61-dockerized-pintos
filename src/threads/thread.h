@@ -110,8 +110,16 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+bool list_less_comp(const struct list_elem * a,const struct list_elem* b, void* aux UNUSED);
+void thread_need_to_yield(void);
+/// @brief Will be called by the timer interrupt to update all the recent_cpu for all system threads every 100 tick
+/// @param  
 void thread_update_recent_cpu_all(void);
+/// @brief will be called inside the timer interrupt to update all the priority every four ticks
+/// @param  
 void thread_update_priority_all(void);
+/// @brief will be called by timer interrupt to update the load average every 100 tick
+/// @param  
 void update_load_avg(void);
 void thread_init (void);
 void thread_start (void);
