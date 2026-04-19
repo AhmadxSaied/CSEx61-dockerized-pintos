@@ -41,6 +41,17 @@
 
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
+
+
+
+     
+static bool 
+sema_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
+{
+  return list_entry (a, struct thread, elem)->priority < 
+         list_entry (b, struct thread, elem)->priority;
+}
+
 void
 sema_init (struct semaphore *sema, unsigned value) 
 {
@@ -105,7 +116,7 @@ sema_try_down (struct semaphore *sema)
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
-void
+/*void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
@@ -118,6 +129,35 @@ sema_up (struct semaphore *sema)
                                 struct thread, elem));
   sema->value++;
   intr_set_level (old_level);
+}*/
+
+void
+sema_up (struct semaphore *sema) 
+{
+  enum intr_level old_level;
+  struct thread *unblocked_thread = NULL;
+
+  ASSERT (sema != NULL);
+
+  old_level = intr_disable ();
+  if (!list_empty (&sema->waiters)) 
+    {
+      
+      struct list_elem *max_elem = list_max (&sema->waiters, sema_priority_less, NULL);
+      list_remove (max_elem);
+      
+      unblocked_thread = list_entry (max_elem, struct thread, elem);
+      thread_unblock (unblocked_thread);
+    }
+  sema->value++;
+  intr_set_level (old_level);
+
+  
+  if (unblocked_thread != NULL && !intr_context () && 
+      unblocked_thread->priority > thread_current ()->priority) 
+    {
+      thread_yield ();
+    }
 }
 
 static void sema_test_helper (void *sema_);
@@ -259,8 +299,9 @@ lock_try_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   success = sema_try_down (&lock->semaphore);
-  if (success)
+  if (success) {
     lock->holder = thread_current ();
+  }
   return success;
 }
 
