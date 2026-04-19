@@ -251,6 +251,10 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  if(t->priority > thread_current()->priority){
+  thread_yield();
+  }
+
   return tid;
 }
 
@@ -397,8 +401,9 @@ thread_set_priority (int new_priority)
   if(thread_mlfqs) return;
 
   thread_current ()->priority = new_priority;
-  if(thread_current() != idle_thread && !list_empty(&ready_list) 
-  && thread_current()->priority < list_entry(list_max(&ready_list,&list_less_comp,NULL),struct thread,elem)->priority){
+  if(list_empty(&ready_list)) return;
+  struct thread *max_thread = list_entry(list_max(&ready_list, list_less_comp, NULL), struct thread, elem);
+  if(max_thread->priority > thread_current ()->priority) {
     thread_yield();
   }
 }
@@ -571,12 +576,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->stored = priority ;  // the original one
   t->magic = THREAD_MAGIC;
-  // this was the one causing the booting issue as i didnt see if it was the initial thread or not
-  if(thread_mlfqs){
-
+  list_init(&t->held_locks) ; // initialize for held_locks 
   if(t == initial_thread){
-
     t->nice = 0;
     t->recent_cpu = 0;
 
@@ -594,7 +597,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
     }
   }
-}
+
   
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -619,18 +622,19 @@ alloc_frame (struct thread *t, size_t size)
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
+
 static struct thread *
 next_thread_to_run (void) 
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else{
-
-    struct thread* torun =list_entry(list_max(&ready_list,&list_less_comp,NULL),struct thread,elem);
-    list_remove(&torun->elem);
-    return torun;
-
+  else {
+    struct thread *max_thread = list_entry(list_max(&ready_list, &list_less_comp, NULL), struct thread, elem);
+    list_remove(&max_thread->elem);
+    return max_thread;
   }
+    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    // loop over ready_list, find the one with the highest thread->priority
 }
 
 /* Completes a thread switch by activating the new thread's page
