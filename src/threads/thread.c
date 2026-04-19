@@ -181,7 +181,7 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-if(t != idle_thread){
+if(t != idle_thread && thread_mlfqs){
       t->recent_cpu = add(t->recent_cpu,convert_fixed_point(1));
 }
   /* Enforce preemption. */
@@ -398,11 +398,9 @@ void
 thread_set_priority (int new_priority) 
 {
   
-  if(thread_mlfqs) return;
-
-  thread_current ()->priority = new_priority;
-  if(list_empty(&ready_list)) return;
-  struct thread *max_thread = list_entry(list_max(&ready_list, list_less_comp, NULL), struct thread, elem);
+  if(thread_mlfqs || list_empty(&ready_list)) return;
+  thread_current()->priority = new_priority;
+  struct thread *max_thread = list_entry(list_max(&ready_list, &list_less_comp, NULL), struct thread, elem);
   if(max_thread->priority > thread_current ()->priority) {
     thread_yield();
   }
@@ -437,7 +435,7 @@ thread_set_nice (int nice UNUSED)
   if(curr->priority < PRI_MIN) curr->priority= PRI_MIN;
 
   if(!list_empty(&ready_list)){
-  int max_priority= list_entry(list_front(&ready_list),
+  int max_priority= list_entry(list_max(&ready_list,&list_less_comp,NULL),
 struct thread,elem)->priority;
 
 if(curr->priority < max_priority){
@@ -579,6 +577,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stored = priority ;  // the original one
   t->magic = THREAD_MAGIC;
   list_init(&t->held_locks) ; // initialize for held_locks 
+  if(thread_mlfqs){
   if(t == initial_thread){
     t->nice = 0;
     t->recent_cpu = 0;
@@ -597,8 +596,14 @@ init_thread (struct thread *t, const char *name, int priority)
 
     }
   }
-
-  
+  } 
+  if(t != initial_thread && t->priority > thread_current()->priority){
+    if(intr_context()){
+      intr_yield_on_return();
+    }else{
+      thread_yield();
+    }
+  }
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
