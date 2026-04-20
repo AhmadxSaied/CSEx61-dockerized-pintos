@@ -397,7 +397,8 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  
+  thread_current()->stored = new_priority; 
+   // edge case (lock p < new p < stored) left 
   if(thread_mlfqs || list_empty(&ready_list)) return;
   thread_current()->priority = new_priority;
   struct thread *max_thread = list_entry(list_max(&ready_list, &list_less_comp, NULL), struct thread, elem);
