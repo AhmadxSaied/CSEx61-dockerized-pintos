@@ -67,8 +67,9 @@ sema_down (struct semaphore *sema)
 
   old_level = intr_disable ();
   while (sema->value == 0) 
-    {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+    {//gom3a
+      //list_push_back (&sema->waiters, &thread_current ()->elem); same idea of priority
+      list_insert_ordered(&sema->waiters,&thread_current ()->elem,thread_compare_priority,NULL);
       thread_block ();
     }
   sema->value--;
@@ -109,15 +110,26 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
+  struct thread *woken_thread =NULL; //exact thread who wake up in the morning
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
+  if (!list_empty (&sema->waiters)) { //gom3a
+   /*thread_unblock (list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem));*/ 
+    list_sort(&sema->waiters,thread_compare_priority,NULL);
+    
+    woken_thread = (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
+    thread_unblock(woken_thread);}
+
   sema->value++;
   intr_set_level (old_level);
+  //gom3a
+  if(woken_thread != NULL && !intr_context() && woken_thread->priority > thread_current ()->priority){
+    thread_yield(); //if we just wake up a thread have more priority leave  the cpu for the sake of
+  }
 }
 
 static void sema_test_helper (void *sema_);
@@ -179,6 +191,10 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+
+  //gom3a
+  lock-> max_priority = 0;//0 is the minimum priority in pintos i think initialized not to contain garbage
+  //gom3a
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -195,9 +211,29 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  //gom3a
+  struct thread *cur =thread_current ();
+  
+  if(lock->holder !=NULL){
+    cur->lock_waiting=lock; //the thread is gonna sleep record the lock it's waiting on 
+    //traverse the chain of locks to donate priority
+    struct lock *l =lock;
+    while(l !=NULL &&l->holder !=NULL && l->holder->priority <cur->priority){
+      //donate the high priority to the thread holding the lock
+      l->holder->priority =cur->priority;
 
-  sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+      //move up the chain to the next lock to see if we need to denote to more threads or sth
+      l=l->holder->lock_waiting;
+
+    }
+  }
+
+  sema_down (&lock->semaphore); //sleep until the lock is available
+ // lock->holder = thread_current (); // the same as line 223 but sooooo
+
+ cur->lock_waiting=NULL; //the thread an't waiting no more 
+ lock->holder = cur; //the thread holds the lock
+ list_push_back (&cur->locks_held,&lock->element);//add it to the the locks the thread holds
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -231,9 +267,33 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  lock->holder = NULL;
+  //gom3a
+  struct thread *cur = thread_current();
+
+  list_remove (&lock->element);
+  lock->holder =NULL; //remove the lock from the held list and also clear the holder
+
+  cur->priority = cur->original_priority; // get back the original prioirty not the nested one
+  //then we check if we still have any other locks that have waiting threads with high nested priority
+  struct list_elem *e;
+  for(e= list_begin (&cur->locks_held); e != list_end (&cur->locks_held) ; e = list_next(e)){
+    struct lock *l = list_entry(e, struct lock ,element);
+
+    //lock at each of the waiting threads this lock if there's another lock and another priority higher we give it to it until it release the key 
+    struct list_elem *waiter_e;
+    for(waiter_e = list_begin(&l->semaphore.waiters); waiter_e != list_end (&l->semaphore.waiters); waiter_e = list_next(waiter_e)){
+      struct thread *waiter = list_entry (waiter_e,struct thread,elem);
+      if(waiter->priority >cur->priority){
+        //keep the higher priority donated to it 
+        cur->priority = waiter->priority;
+      }
+    }
+  }
   sema_up (&lock->semaphore);
-}
+  if(!intr_context()){
+    thread_yield();//preempt if a waiting thread has higher priority
+  }
+}//gom3a
 
 /* Returns true if the current thread holds LOCK, false
    otherwise.  (Note that testing whether some other thread holds
@@ -308,6 +368,20 @@ cond_wait (struct condition *cond, struct lock *lock)
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to signal a condition variable within an
    interrupt handler. */
+
+//gom3a 
+bool cond_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED)
+{
+  struct semaphore_elem *sa = list_entry(a,struct semaphore_elem,elem);
+  struct semaphore_elem *sb= list_entry(b,struct semaphore_elem,elem);
+  if(list_empty(&sa->semaphore.waiters) || list_empty(&sb->semaphore.waiters))
+  return false;
+  //Get the thread that is waiting on this semaphore
+  struct thread *ta = list_entry(list_front (&sa->semaphore.waiters),struct thread,elem);
+  struct thread *tb = list_entry(list_front (&sb->semaphore.waiters),struct thread,elem);
+
+  return ta->priority > tb->priority;
+}//gom3a
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) 
 {
@@ -317,8 +391,14 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
+  {
+  //gom3a sort the condition waiters just before wake up
+  list_sort (&cond->waiters,cond_compare_priority,NULL);
+   /*treat semaphore_elem as thread elem to sort */
+  //GOM3A
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

@@ -59,6 +59,16 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+//gom3a
+bool
+thread_compare_priority (const struct list_elem *a, const struct list_elem *b ,void *aux UNUSED)
+{
+  struct thread *ta = list_entry(a,struct thread , elem);
+  struct thread *tb = list_entry(b,struct thread,elem);
+  return ta->priority > tb->priority; //to tell list_insert_ordered to have em sorted
+}
+//gom3a
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -201,6 +211,11 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  //gom3a
+  if(thread_current ()->priority<priority){
+    thread_yield(); // preemption check if a new thread have a higher priority
+  }
+
   return tid;
 }
 
@@ -237,7 +252,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //list_push_back (&ready_list, &t->elem); replace the list witha  priority queue
+  list_insert_ordered(&ready_list,&t->elem,thread_compare_priority,NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -308,7 +324,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    //list_push_back (&ready_list, &cur->elem); same idea we change the queue to priority one
+    list_insert_ordered(&ready_list,&cur->elem,thread_compare_priority,NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -332,11 +349,25 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/*"Okay I'll remember that your new base priority is 20. 
+But since you are currently carrying a donated priority of 60,
+ I am going to keep you at 60 until you release the lock!"*/
 void
 thread_set_priority (int new_priority) 
-{
-  thread_current ()->priority = new_priority;
-}
+{//gom3a
+
+  struct thread *cur = thread_current();
+
+  cur->original_priority = new_priority;
+  //remember we only update the active priority if the new one is higher than the denoted current one 
+  //or if we  don't have no locks so no donations
+  if(list_empty (&cur->locks_held) || new_priority>cur->priority){
+    cur->priority = new_priority;
+  }
+  // any time we changes the priority we check if there's another thread more important 
+  thread_yield();
+  
+}//gom3a
 
 /* Returns the current thread's priority. */
 int
@@ -463,6 +494,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  //gom3a 
+  t->original_priority=priority; //when creating a new thread original priority equals current priority
+  list_init (&t->locks_held); // we start with an empty list of locks
+  t->lock_waiting = NULL; //at birth we still don't have any locks to wait on
+  //gom3a 
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
