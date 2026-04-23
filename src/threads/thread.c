@@ -397,14 +397,29 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current()->stored = new_priority; 
+  if(thread_mlfqs)return;
+
+  struct thread *cur = thread_current();
+  cur->stored = new_priority; 
+
+  //update active priority only if we have no donation or if the new proirt is higher than our current donation priority
+
    // edge case (lock p < new p < stored) left 
-  if(thread_mlfqs || list_empty(&ready_list)) return;
+  /*if(thread_mlfqs || list_empty(&ready_list)) return;
   thread_current()->priority = new_priority;
-  struct thread *max_thread = list_entry(list_max(&ready_list, &list_less_comp, NULL), struct thread, elem);
-  if(max_thread->priority > thread_current ()->priority) {
-    thread_yield();
+  */
+  if(list_empty(&cur->held_locks) || new_priority> cur->priority){
+    cur->priority = new_priority;
   }
+
+  //check if we need to yield
+  if(!list_empty(&ready_list)){
+    struct thread *max_thread = list_entry(list_max(&ready_list, &list_less_comp, NULL), struct thread, elem);
+    if(max_thread->priority >cur->priority){
+      thread_yield();
+    }
+  }
+  
 }
 
 /* Returns the current thread's priority. */
@@ -578,6 +593,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stored = priority ;  // the original one
   t->magic = THREAD_MAGIC;
   list_init(&t->held_locks) ; // initialize for held_locks 
+  t->lock_waiting =NULL; //when a new thread is initiated it's not waitin' for nothin'
   if(thread_mlfqs){
   if(t == initial_thread){
     t->nice = 0;

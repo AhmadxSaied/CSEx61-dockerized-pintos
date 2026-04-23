@@ -94,6 +94,8 @@ struct thread
 
     struct list held_locks ;  // current locks held by the thread itself , to tracke the locks acquired by the current thread 
     int stored ;  // storing the original priority 
+    //gom3a
+    struct lock *lock_waiting; //pointer  for what lcok the thread is currently waiting for 
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
