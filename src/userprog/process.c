@@ -23,6 +23,10 @@ static void push_stack(int order, void **esp, char *token, char **argv, int argc
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp, char** save_ptr);
+struct args {
+	char *file_name;
+	struct child *child;
+};
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -33,6 +37,15 @@ process_execute (const char *file_name)
 {
 	char *fn_copy;
 	tid_t tid;
+	struct child *cs = malloc(sizeof(struct child));
+	if (cs == NULL){
+		return TID_ERROR;
+	}
+	struct thread *cur = thread_current();
+	cs->tid = -1;
+	cs->load_success = false;
+	sema_init(&cs->load_done, 0);
+	list_push_back(&cur->children, &cs->elem);
 
 	/* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -46,18 +59,44 @@ process_execute (const char *file_name)
 	file_name = strtok_r((char *) file_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-	if (tid == TID_ERROR)
+	struct args *args = malloc(sizeof(struct args));
+	if (args == NULL) {
 		palloc_free_page (fn_copy);
+		list_remove(&cs->elem);
+		free(cs);
+		return TID_ERROR;
+	}
+
+	args->file_name = fn_copy;
+	args->child= cs;
+	tid = thread_create (file_name, PRI_DEFAULT, start_process, args);
+
+	if (tid == TID_ERROR) {
+        list_remove(&cs->elem);
+        free(cs);
+        free(args);
+        palloc_free_page (fn_copy);
+        return TID_ERROR;
+    }
+
+    cs->tid = tid; 
+    sema_down(&cs->load_done);
+
+	if(!cs->load_success){
+		return TID_ERROR;
+	}
+
 	return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *args_)
 {
-	char *file_name = file_name_;
+	struct args *args = args_;
+	char *file_name = args->file_name;
+	struct child *cs = args->child;
 	struct intr_frame if_;
 	bool success;
 
@@ -71,11 +110,14 @@ start_process (void *file_name_)
 	if_.cs = SEL_UCSEG;
 	if_.eflags = FLAG_IF | FLAG_MBS;
 	success = load (file_name, &if_.eip, &if_.esp, &save_ptr);
-
+	cs->load_success = success;
+    sema_up(&cs->load_done);
+	free(args);
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
-	if (!success)
+	if (!success){
 		thread_exit ();
+	}
 
 	/* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

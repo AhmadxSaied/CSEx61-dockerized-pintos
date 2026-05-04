@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -92,6 +93,7 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list children; // <------------ 2he ya gma3a 2l list of childs lkol process
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -102,6 +104,12 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+struct child{ // <-------- 2l struct bta3 2l child nafso 2ana m5azen feh 2l 7agat 2ly m7tagha fe 2l execution
+    tid_t tid;                  
+    bool load_success;         
+    struct semaphore load_done; 
+    struct list_elem elem;
+};
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */

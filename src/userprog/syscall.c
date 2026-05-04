@@ -132,7 +132,7 @@ void exit(int status)
 */
 pid_t exec(const char *cmd_line)
 {
-  // TODDO
+  return process_execute(cmd_line);
 }
 
 /*  wait for a child process pid and retrieves the child_exit status
