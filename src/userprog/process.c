@@ -35,6 +35,8 @@ struct args {
 tid_t
 process_execute (const char *file_name) 
 {
+
+	
 	char *fn_copy;
 	tid_t tid;
 	struct child *cs = malloc(sizeof(struct child));
@@ -42,6 +44,7 @@ process_execute (const char *file_name)
 		return TID_ERROR;
 	}
 	struct thread *cur = thread_current();
+	sema_init(&cs->exit , 0 ) ;
 	cs->tid = -1;
 	cs->load_success = false;
 	sema_init(&cs->load_done, 0);
@@ -141,7 +144,38 @@ start_process (void *args_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-	return -1;
+
+
+	struct list_elem *e;
+	struct thread *cur = thread_current() ;
+	struct child *child_struct  = NULL ;
+
+	// search for the child that supposed to wait on if null or already being waited then return -1
+
+    for (e = list_begin (&cur -> children ); e != list_end (&cur -> children); e = list_next (e) ) {
+
+		struct child *temp = list_entry (e , struct child , elem ) ;
+		if (temp-> tid == child_tid) {
+			child_struct = temp ;
+			break; 
+		}
+	} 
+      
+	if (child_struct == NULL  ||  child_struct -> waitingOn ) {
+		return -1 ;
+	}
+	child_struct-> waitingOn = 1 ;
+
+	sema_down(&child_struct -> exit ) ;
+
+	int status = child_struct-> exitStatus ;
+
+	list_remove(&child_struct -> elem ) ;
+	free (child_struct) ;
+
+
+	return status ;
+
 }
 
 /* Free the current process's resources. */

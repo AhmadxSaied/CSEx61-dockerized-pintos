@@ -144,6 +144,7 @@ pid_t exec(const char *cmd_line)
 int wait(pid_t pid)
 {
   // TODO
+  return process_wait (pid) ;
 }
 /*
   creates a new file called file with size initial size

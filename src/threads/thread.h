@@ -94,6 +94,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list children; // <------------ 2he ya gma3a 2l list of childs lkol process
+    
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -109,6 +110,11 @@ struct child{ // <-------- 2l struct bta3 2l child nafso 2ana m5azen feh 2l 7aga
     bool load_success;         
     struct semaphore load_done; 
     struct list_elem elem;
+    struct semaphore exit ;
+    struct thread parent ;
+    bool waitingOn ;
+    int exitStatus ;
+
 };
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
