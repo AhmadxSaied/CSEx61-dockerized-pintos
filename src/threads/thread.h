@@ -94,7 +94,19 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list children; // <------------ 2he ya gma3a 2l list of childs lkol process
+
+    // for exit()
+    // list of opened files
+    struct list files;
     
+    // if dynamically allocated and belong to only on thread ig?
+    // so not necessary here
+    // list of all semaphores (including locks, cond_vars, etc.. since they're all implemented using semaphores)
+    struct list semaphores;
+
+    // pointer to the child struct that will be stored in the 
+    // children list of the parent
+    struct child *self_child;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

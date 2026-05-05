@@ -123,7 +123,15 @@ void halt(void)
 */
 void exit(int status)
 {
-  // TODO
+  struct thread *cur = thread_current();
+
+  // my child struct (current thread IS the child), the one in my parent's list
+  struct child *cur_child = cur->self_child;
+  if (cur_child != NULL) {
+    cur_child->exitStatus = status;
+    sema_up(&cur_child->exit);
+  }
+  thread_exit();
 }
 /* runs a new process and returns its pid
   parent process cannot return from the exec until it knows whether child

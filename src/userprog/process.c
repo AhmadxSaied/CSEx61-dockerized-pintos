@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
 
@@ -100,6 +101,7 @@ start_process (void *args_)
 	struct args *args = args_;
 	char *file_name = args->file_name;
 	struct child *cs = args->child;
+	thread_current()->self_child = cs;
 	struct intr_frame if_;
 	bool success;
 
@@ -179,15 +181,28 @@ process_wait (tid_t child_tid UNUSED)
 }
 
 /* Free the current process's resources. */
+// check if parent is pointing to me, pass the status value
 void
 process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
 
+	// close opened files
+	while(!list_empty(&cur->files)) {
+		struct list_elem *e = list_pop_front(&cur->files);
+		struct open_file *of = list_entry(e, struct open_file, elem);
+		
+		// should be replaced by the syscall close?
+		file_close(of->file);
+		free(of);
+	}
+
+	
 	/* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
 	pd = cur->pagedir;
+
 	if (pd != NULL)
 	{
 		/* Correct ordering here is crucial.  We must set
