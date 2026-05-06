@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "syscall.h"
+#include "stdlib.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;

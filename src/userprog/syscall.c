@@ -1,6 +1,5 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -12,6 +11,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include <stdlib.h>
 
 struct lock fs_lock;
 
@@ -20,7 +20,7 @@ int get_int(int **esp);
 char *get_char_ptr(char ***esp);
 void *get_void_ptr(void ***esp);
 void validate_void_ptr(void *ptr);
-
+void validate_buffer(void* buffer,unsigned size);
 // system_dependent
 void sys_halt_wrapper();
 void sys_exit_wrapper(struct intr_frame *f);
@@ -62,8 +62,9 @@ void syscall_init(void)
 static void
 syscall_handler(struct intr_frame *f UNUSED) //gom3a
 {
-  printf("system call!\n");
-  
+  // printf("system call!\n");
+  validate_void_ptr(f->esp);
+  void * orig = f->esp;
   int system_call_type = *(int *)f->esp;  // ✓ CORRECT - dereference to get value
   f->esp = (int *)f->esp + 1;             // ✓ CORRECT - increment by 4 bytes
   
@@ -111,6 +112,7 @@ syscall_handler(struct intr_frame *f UNUSED) //gom3a
       exit(-1);  // Invalid syscall
       break;
   }
+  f->esp = orig;
 }
 
 // terminated pintos
@@ -363,20 +365,20 @@ void sys_halt_wrapper()
 void sys_exit_wrapper(struct intr_frame *f)
 {
   int status = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   exit(status);
 }
 void sys_exec_wrapper(struct intr_frame *f)
 {
   char *cmd_line = get_char_ptr((char ***)&f->esp);
   validate_void_ptr((void *)cmd_line);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   f->eax = exec(cmd_line);
 }
 void sys_wait_wrapper(struct intr_frame *f)
 {
   pid_t pid = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   f->eax = wait(pid);
 }
 
@@ -384,17 +386,18 @@ void sys_wait_wrapper(struct intr_frame *f)
 void sys_create_wrapper(struct intr_frame *f)
 {
   char *file = get_char_ptr((char ***)&f->esp);
-  validate_void_ptr((void *)file);
-  f->esp +=1;
-  unsigned int initial_size = (unsigned int)get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
 
+  unsigned int initial_size = (unsigned int)get_int((int **)&f->esp);
+  f->esp = (int *)f->esp + 1;
+
+  validate_void_ptr((void *)file);
   f->eax = create(file, initial_size);
 }
 void sys_remove_wrapper(struct intr_frame *f)
 {
-  int *args = (int *)f->esp;  // Cast once
-  char *file = *(char **)(args + 0);
+  char *file = get_char_ptr((char***)&f->esp);
+  f->esp = (int*)f->esp + 1;
   validate_void_ptr((void *)file);
   // Don't modify f->esp in wrappers!
   f->eax = remove(file);
@@ -403,54 +406,68 @@ void sys_open_wrapper(struct intr_frame *f)
 {
   char *file = get_char_ptr((char ***)&f->esp);
   validate_void_ptr((void *)file);
-  f->esp +=1;
+
+  f->esp = (int *)f->esp + 1;
   f->eax = open(file);
 }
 void sys_filesize_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   f->eax = filesize(fd);
 }
 void sys_read_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
-  void *buffer = get_void_ptr((void **)f->esp);
-  validate_void_ptr(buffer);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
+
+  void *buffer = get_void_ptr((void ***)&f->esp);
+  f->esp = (int *)f->esp + 1;
+
   unsigned int size = (unsigned int)get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
+
+  validate_buffer(buffer,size);
   f->eax = read(fd, buffer, size);
 }
 void sys_write_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
-  void *buffer = get_void_ptr((void **)f->esp);
-  validate_void_ptr(buffer);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
+
+  void *buffer = get_void_ptr((void ***)&f->esp);
+  f->esp = (int *)f->esp + 1;
+
   unsigned int size = (unsigned int)get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
+
+  validate_buffer(buffer,size);
   f->eax = write(fd, buffer, size);
 }
 void sys_seek_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   unsigned int position = (unsigned int)get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   seek(fd, position);
 }
 void sys_tell_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   f->eax = tell(fd);
 }
 void sys_close_wrapper(struct intr_frame *f)
 {
   int fd = get_int((int **)&f->esp);
-  f->esp +=1;
+  f->esp = (int *)f->esp + 1;
   close(fd);
+}
+void validate_buffer(void* buffer,unsigned size){
+  unsigned i;
+  char* ptr= (char*) buffer;
+  for(i= 0;i<size;i++){
+    validate_void_ptr((void*)(ptr+i));
+  }
 }
