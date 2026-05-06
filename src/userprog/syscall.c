@@ -352,7 +352,7 @@ void *get_void_ptr(void ***esp)
 }
 void validate_void_ptr(void *ptr)
 {
-  if (!(ptr != NULL && is_user_vaddr(ptr)))
+  if (ptr == NULL || !is_user_vaddr(ptr) || pagedir_get_page(thread_current()->pagedir,ptr)==NULL)
   {
     exit(-1);
   }
