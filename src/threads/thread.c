@@ -472,6 +472,11 @@ init_thread (struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 
+	list_init(&t->files);
+	list_init(&t->children);
+	t->next_fd = 2 ; //0 is the stdin , and 1 is the stdout
+	t->exec_file = NULL;
+
 	old_level = intr_disable ();
 	list_push_back (&all_list, &t->allelem);
 	intr_set_level (old_level);

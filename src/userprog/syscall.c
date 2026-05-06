@@ -7,7 +7,13 @@
 #include "devices/shutdown.h"
 #include "lib/user/syscall.h"
 #include "threads/vaddr.h"
-#include <pagedir.c>
+#include "userprog/pagedir.h"
+#include "threads/synch.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "devices/input.h"
+
+struct lock fs_lock;
 
 static void syscall_handler(struct intr_frame *);
 int get_int(int **esp);
@@ -34,8 +40,10 @@ void sys_close_wrapper(struct intr_frame *f);
 
 void syscall_init(void)
 {
+  lock_init(&fs_lock);
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
+
 
 // SYS_HALT = 0,                   /* Halt the operating system. */
 // SYS_EXIT = 1,                   /* Terminate this process. */
@@ -52,65 +60,57 @@ void syscall_init(void)
 // SYS_CLOSE = 12,                  /* Close a file. */
 
 static void
-syscall_handler(struct intr_frame *f UNUSED)
+syscall_handler(struct intr_frame *f UNUSED) //gom3a
 {
   printf("system call!\n");
-  int system_call_type = f->esp;
-  f->esp +=1;
-
-  if (system_call_type == SYS_HALT)
-  {
-    sys_halt_wrapper();
+  
+  int system_call_type = *(int *)f->esp;  // ✓ CORRECT - dereference to get value
+  f->esp = (int *)f->esp + 1;             // ✓ CORRECT - increment by 4 bytes
+  
+  switch(system_call_type) {
+    case SYS_HALT:
+      sys_halt_wrapper();
+      break;
+    case SYS_EXIT:
+      sys_exit_wrapper(f);
+      break;
+    case SYS_EXEC:
+      sys_exec_wrapper(f);
+      break;
+    case SYS_WAIT:
+      sys_wait_wrapper(f);
+      break;
+    case SYS_CREATE:
+      sys_create_wrapper(f);
+      break;
+    case SYS_REMOVE:
+      sys_remove_wrapper(f);
+      break;
+    case SYS_OPEN:
+      sys_open_wrapper(f);
+      break;
+    case SYS_FILESIZE:
+      sys_filesize_wrapper(f);  // ✓ FIXED - was calling filesize(f)
+      break;
+    case SYS_READ:
+      sys_read_wrapper(f);
+      break;
+    case SYS_WRITE:
+      sys_write_wrapper(f);
+      break;
+    case SYS_SEEK:
+      sys_seek_wrapper(f);
+      break;
+    case SYS_TELL:
+      sys_tell_wrapper(f);
+      break;
+    case SYS_CLOSE:
+      sys_close_wrapper(f);
+      break;
+    default:
+      exit(-1);  // Invalid syscall
+      break;
   }
-  else if (system_call_type == SYS_EXIT)
-  {
-    sys_exit_wrapper(f);
-  }
-  else if (system_call_type == SYS_EXEC)
-  {
-    sys_exec_wrapper(f);
-  }
-  else if (system_call_type == SYS_WAIT)
-  {
-    sys_wait_wrapper(f);
-  }
-  else if (system_call_type == SYS_CREATE)
-  {
-    sys_create_wrapper(f);
-  }
-  else if (system_call_type == SYS_REMOVE)
-  {
-    remove(f);
-  }
-  else if (system_call_type == SYS_OPEN)
-  {
-    open(f);
-  }
-  else if (system_call_type == SYS_FILESIZE)
-  {
-    filesize(f);
-  }
-  else if (system_call_type == SYS_READ)
-  {
-    sys_read_wrapper(f);
-  }
-  else if (system_call_type == SYS_WRITE)
-  {
-    sys_write_wrapper(f);
-  }
-  else if (system_call_type == SYS_SEEK)
-  {
-    sys_seek_wrapper(f);
-  }
-  else if (system_call_type == SYS_TELL)
-  {
-    sys_tell_wrapper(f);
-  }
-  else if (system_call_type == SYS_CLOSE)
-  {
-    sys_close_wrapper(f);
-  }
-  thread_exit();
 }
 
 // terminated pintos
@@ -158,9 +158,30 @@ int wait(pid_t pid)
   creates a new file called file with size initial size
   return true on success and false otherwise
 */
+
+static struct open_file *findfile_by_fd(int fd){
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+
+  for (e=list_begin(&cur->files); e!=list_end(&cur->files); e= list_next(e)){
+    struct open_file *of = list_entry(e,struct open_file,elem);
+    if(of->fd ==fd){
+      return of;
+    }
+  }
+  return NULL; //couldn't get the file descriptor
+}
+
+
 bool create(const char *file, unsigned initial_size)
 {
-  // TODO
+  if(file ==NULL)exit(-1);
+
+  lock_acquire(&fs_lock);
+  bool success = filesys_create(file,initial_size);
+  lock_release(&fs_lock);
+
+  return success;
 }
 /*
  deletes a file with name given in argument
@@ -169,7 +190,13 @@ bool create(const char *file, unsigned initial_size)
 */
 bool remove(const char *file)
 {
-  // TODO
+  if(file==NULL) exit(-1);
+
+  lock_acquire(&fs_lock);
+  bool success =filesys_remove(file);
+  lock_release(&fs_lock);
+
+  return success;
 }
 /*
   returns a non-negatve integer called file descriptor (fd) or -1 if we couldnt open the file
@@ -178,14 +205,42 @@ bool remove(const char *file)
 */
 int open(const char *file)
 {
-  // TODO
+  if(file==NULL) exit(-1);
+
+  lock_acquire(&fs_lock);
+  struct file *opened_file = filesys_open(file);
+  if(opened_file ==NULL){
+    lock_release(&fs_lock);
+    return -1;
+  }
+  struct open_file *of =malloc(sizeof(struct open_file));
+  if(of==NULL){
+    file_close(opened_file);
+    lock_release(&fs_lock);
+    return -1;
+  }
+  struct thread *cur = thread_current();
+  of->file = opened_file;
+  of->fd = cur->next_fd++; // increamenet for next file
+  list_push_back(&cur->files,&of->elem);
+
+  lock_release(&fs_lock);
+  return of->fd;
 }
 /*
   returns file size in bytes
 */
 int filesize(int fd)
 {
-  // TODO
+  lock_acquire(&fs_lock);
+  struct open_file *of =findfile_by_fd(fd);
+  if(of ==NULL){
+    lock_release(&fs_lock);
+    return -1;
+  }
+  int size = file_length(of->file);
+  lock_release(&fs_lock);
+  return size ;
 }
 /*
   reads (size) bytes from the file with fd into buffer
@@ -194,7 +249,26 @@ int filesize(int fd)
 */
 int read(int fd, void *buffer, unsigned size)
 {
-  // TODO
+  if(buffer ==NULL) exit(-1);
+
+  //handle keyboard stdin
+  if(fd ==0){
+    uint8_t *buf = (uint8_t *)buffer;
+    for(unsigned i =0 ; i <size ;i++){
+      buf[i] = input_getc();
+    }
+    return size;
+  }
+  lock_acquire(&fs_lock);
+  struct open_file *of = findfile_by_fd(fd);
+  if(of==NULL){
+    lock_release(&fs_lock);
+    return -1;
+  }
+
+  int bytes_read=file_read(of->file,buffer,size);
+  lock_release(&fs_lock);
+  return bytes_read;
 }
 /*
   writes (size) bytes from buffer to open file fd
@@ -202,28 +276,64 @@ int read(int fd, void *buffer, unsigned size)
 */
 int write(int fd, const void *buffer, unsigned size)
 {
-  // TODO
+  if(buffer ==NULL) exit(-1);
+
+  //handle the stdout
+  if(fd==1){
+    putbuf(buffer,size);
+    return size;
+  }
+
+  lock_acquire(&fs_lock);
+  struct open_file *of = findfile_by_fd(fd);
+  if(of ==NULL){
+    lock_release(&fs_lock);
+    return -1;
+  }
+
+  int bytes_written = file_write(of->file,buffer,size);
+  lock_release(&fs_lock);
+  return bytes_written;
 }
 /*
   changes the next byte to be read or written in open file fd
 */
 void seek(int fd, unsigned position)
 {
-  // TODO
+  lock_acquire(&fs_lock);
+  struct open_file *of = findfile_by_fd(fd);
+  if(of !=NULL){
+    file_seek(of->file,position);
+  }
+  lock_release(&fs_lock);
 }
 /*
   returns the position of the next byte to be read or written in open file fd
 */
 unsigned tell(int fd)
 {
-  // TODO
+  lock_acquire(&fs_lock);
+  struct open_file *of = findfile_by_fd(fd);
+  unsigned pos = 0;
+  if(of !=NULL){
+    pos = file_tell(of->file);
+  }
+  lock_release(&fs_lock);
+  return pos;
 }
 /*
   closes file descriptor fd
 */
 void close(int fd)
 {
-  // TODO
+  lock_acquire(&fs_lock);
+  struct open_file *of = findfile_by_fd(fd);
+  if(of !=NULL){
+    file_close(of->file);
+    list_remove(&of->elem);
+    free(of);
+  }
+  lock_release(&fs_lock);
 }
 
 char *get_char_ptr(char ***esp)
@@ -283,11 +393,12 @@ void sys_create_wrapper(struct intr_frame *f)
 }
 void sys_remove_wrapper(struct intr_frame *f)
 {
-  char *file = get_char_ptr((char ***)&f->esp);
+  int *args = (int *)f->esp;  // Cast once
+  char *file = *(char **)(args + 0);
   validate_void_ptr((void *)file);
-  f->esp +=1;
+  // Don't modify f->esp in wrappers!
   f->eax = remove(file);
-}
+} //gom3a
 void sys_open_wrapper(struct intr_frame *f)
 {
   char *file = get_char_ptr((char ***)&f->esp);

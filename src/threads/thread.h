@@ -81,6 +81,17 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+//keep track of the file descriptors mousv
+struct open_file {
+   int fd;
+   struct file *file;
+   struct list_elem elem;
+};
+
+
+
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -98,6 +109,12 @@ struct thread
     // for exit()
     // list of opened files
     struct list files;
+
+    //to track the new file descriptors
+    int next_fd;
+
+    //pointer to the running executable file to keep it protected
+    struct file *exec_file;
     
     // if dynamically allocated and belong to only on thread ig?
     // so not necessary here

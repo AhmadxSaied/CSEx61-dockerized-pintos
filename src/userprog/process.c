@@ -17,7 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
+extern struct lock fs_lock;
 
 /* Used for setup_stack */
 static void push_stack(int order, void **esp, char *token, char **argv, int argc);
@@ -188,6 +190,8 @@ process_exit (void)
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
 
+	lock_acquire(&fs_lock);
+
 	// close opened files
 	while(!list_empty(&cur->files)) {
 		struct list_elem *e = list_pop_front(&cur->files);
@@ -197,6 +201,11 @@ process_exit (void)
 		file_close(of->file);
 		free(of);
 	}
+
+	if(cur->exec_file !=NULL){ //close the executable file to allow writes to it again
+		file_close(cur->exec_file);
+	}
+	lock_release(&fs_lock);
 
 	
 	/* Destroy the current process's page directory and switch back
@@ -415,8 +424,13 @@ load (const char *file_name, void (**eip) (void), void **esp, char **save_ptr)
 	success = true;
 
 	done:
+	if(success){
+		//save the executable file pointer so we can close it in the process exit later
+		t->exec_file=file;
+	}else{
+		file_close (file);
+	}
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
 	return success;
 }
 
