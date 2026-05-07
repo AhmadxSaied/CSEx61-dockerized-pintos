@@ -126,6 +126,7 @@ void halt(void)
 void exit(int status)
 {
   struct thread *cur = thread_current();
+  cur->exit_status = status;
 
   // my child struct (current thread IS the child), the one in my parent's list
   struct child *cur_child = cur->self_child;

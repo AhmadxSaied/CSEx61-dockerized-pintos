@@ -61,10 +61,14 @@ process_execute (const char *file_name)
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Parsed file name */
-	char *save_ptr;
-	file_name = strtok_r((char *) file_name, " ", &save_ptr);
 
-	/* Create a new thread to execute FILE_NAME. */
+	
+	char thread_name[16];
+	strlcpy(thread_name, file_name, sizeof thread_name);
+	char *save_ptr_name;
+	strtok_r(thread_name, " ", &save_ptr_name);
+
+	
 	struct args *args = malloc(sizeof(struct args));
 	if (args == NULL) {
 		palloc_free_page (fn_copy);
@@ -75,7 +79,7 @@ process_execute (const char *file_name)
 
 	args->file_name = fn_copy;
 	args->child= cs;
-	tid = thread_create (file_name, PRI_DEFAULT, start_process, args);
+	tid = thread_create (thread_name, PRI_DEFAULT, start_process, args);
 
 	if (tid == TID_ERROR) {
         list_remove(&cs->elem);
@@ -123,6 +127,11 @@ start_process (void *args_)
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success){
+		thread_current()->exit_status = -1; 
+        if (cs != NULL) {
+        cs->exitStatus = -1;            
+        sema_up(&cs->exit);
+    }
 		thread_exit ();
 	}
 
@@ -225,7 +234,7 @@ process_exit (void)
 		pagedir_activate (NULL);
 		pagedir_destroy (pd);
 	}
-	printf("%s: exit(%d)\n", thread_current()->name, cur->status);
+	printf("%s: exit(%d)\n", thread_current()->name, cur->exit_status);
 }
 
 /* Sets up the CPU for running user code in the current

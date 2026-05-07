@@ -106,6 +106,8 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list children; // <------------ 2he ya gma3a 2l list of childs lkol process
 
+    int exit_status ;
+
     // for exit()
     // list of opened files
     struct list files;
