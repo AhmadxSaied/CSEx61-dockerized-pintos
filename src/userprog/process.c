@@ -197,6 +197,7 @@ void
 process_exit (void)
 {
 	struct thread *cur = thread_current ();
+	printf("%s: exit(%d)\n", thread_current()->name, cur->exit_status);
 	uint32_t *pd;
 
 	lock_acquire(&fs_lock);
@@ -210,7 +211,12 @@ process_exit (void)
 		file_close(of->file);
 		free(of);
 	}
-
+	// while(!list_empty(&cur->children)){
+	// 	struct list_elem *e = list_pop_front(&cur->children);
+	// 	struct child * exitchild = list_entry(e, struct child, elem);
+		
+	// 	free(exitchild);
+	// }
 	if(cur->exec_file !=NULL){ //close the executable file to allow writes to it again
 		file_close(cur->exec_file);
 	}
@@ -234,7 +240,6 @@ process_exit (void)
 		pagedir_activate (NULL);
 		pagedir_destroy (pd);
 	}
-	printf("%s: exit(%d)\n", thread_current()->name, cur->exit_status);
 }
 
 /* Sets up the CPU for running user code in the current

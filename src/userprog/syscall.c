@@ -365,6 +365,7 @@ void sys_halt_wrapper()
 }
 void sys_exit_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int status = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   exit(status);
@@ -375,9 +376,11 @@ void sys_exec_wrapper(struct intr_frame *f)
   validate_void_ptr((void *)cmd_line);
   f->esp = (int *)f->esp + 1;
   f->eax = exec(cmd_line);
+  // printf("DEBUG: exec returning pid %d\n", f->eax);
 }
 void sys_wait_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(pid_t));
   pid_t pid = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   f->eax = wait(pid);
@@ -388,7 +391,7 @@ void sys_create_wrapper(struct intr_frame *f)
 {
   char *file = get_char_ptr((char ***)&f->esp);
   f->esp = (int *)f->esp + 1;
-
+  validate_buffer(f->esp,sizeof (unsigned int));
   unsigned int initial_size = (unsigned int)get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
 
@@ -413,18 +416,20 @@ void sys_open_wrapper(struct intr_frame *f)
 }
 void sys_filesize_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   f->eax = filesize(fd);
 }
 void sys_read_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
 
   void *buffer = get_void_ptr((void ***)&f->esp);
   f->esp = (int *)f->esp + 1;
-
+  validate_buffer(f->esp,sizeof(unsigned int));
   unsigned int size = (unsigned int)get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
 
@@ -433,12 +438,13 @@ void sys_read_wrapper(struct intr_frame *f)
 }
 void sys_write_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
 
   void *buffer = get_void_ptr((void ***)&f->esp);
   f->esp = (int *)f->esp + 1;
-
+  validate_buffer(f->esp,sizeof(unsigned int));
   unsigned int size = (unsigned int)get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
 
@@ -447,20 +453,24 @@ void sys_write_wrapper(struct intr_frame *f)
 }
 void sys_seek_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
+  validate_buffer(f->esp,sizeof(unsigned int));
   unsigned int position = (unsigned int)get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   seek(fd, position);
 }
 void sys_tell_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   f->eax = tell(fd);
 }
 void sys_close_wrapper(struct intr_frame *f)
 {
+  validate_buffer(f->esp,sizeof(int));
   int fd = get_int((int **)&f->esp);
   f->esp = (int *)f->esp + 1;
   close(fd);

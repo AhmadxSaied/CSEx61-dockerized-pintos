@@ -5,7 +5,6 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "syscall.h"
-#include "stdlib.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -159,6 +158,7 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+   // need to be exit but i cant think
   kill (f);
 }
 
