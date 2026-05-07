@@ -50,6 +50,7 @@ process_execute (const char *file_name)
 	sema_init(&cs->exit , 0 ) ;
 	cs->tid = -1;
 	cs->load_success = false;
+	cs->waitingOn = false;
 	sema_init(&cs->load_done, 0);
 	list_push_back(&cur->children, &cs->elem);
 

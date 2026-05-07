@@ -159,6 +159,6 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
    // need to be exit but i cant think
-  kill (f);
+
 }
 
